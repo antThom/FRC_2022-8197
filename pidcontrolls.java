@@ -60,6 +60,10 @@ public class Robot extends TimedRobot
   RelativeEncoder shooter; 
   RelativeEncoder climber;  
   double ErrorLast;
+  double ref = 0.0;
+  double cfClimber_counts2Length = 0.115;
+  double ErrorIntegral = 0.0;
+  // double convert = 5.0/50.0;
 
   @Override
   public void robotInit() 
@@ -96,6 +100,7 @@ public class Robot extends TimedRobot
     brM.setPosition(0.0);
     shooter.setPosition(0.0);
     climber.setPosition(0.0);
+    // climber.setPositionConversionFactor(cfClimber_counts2Length);
   }
 
   //pneumatics (test)
@@ -105,12 +110,16 @@ public class Robot extends TimedRobot
   @Override
   public void teleopInit()
   {
+    time.reset();
+    time.start();
     
   }
+
   
   @Override
   public void teleopPeriodic() 
   {
+    time.start();
     //getting joystick values
     double joystickY = joystick.getY();
     double joystickX = joystick.getX();
@@ -159,21 +168,35 @@ public class Robot extends TimedRobot
       m_intake.set(TalonFXControlMode.PercentOutput,1.0);
     }
     // this is the climber code
-    climberController();
+    // climberController();
     // m_climber.set(0.0);
+    if( mecJoystick.getRawButton(1)){
+     // ref = 300.0;
+      m_climber.set(0.8);
+      climber.setPosition(0.0);
+      //System.out.println("button4Pressed");
+    }
+    if( mecJoystick.getRawButton(4)){
+      ref = -170.0;
+      // m_climber.set(0.8);
+      // System.out.println("button4Pressed");
+    }
 
-    // if( mecJoystick.getRawButton(4)){
-    //   m_climber.set(0.8);
-    // }
-
-    // if(mecJoystick.getRawButton(2)){
-    //   m_climber.set(-0.8);
-    // }
+    if(mecJoystick.getRawButton(2)){
+      ref = 0.0;
+      // m_climber.set(-0.8);
+      // System.out.println("button2Pressed");
+    }
+    // ref = -50.0;
+    if(!mecJoystick.getRawButton(1))
+    {
+    climberController(ref,0.0);
+    }
 
     //ramp up the shooter, exponential vs, slower rise to high speed-----find out about the pressure of the ball    
     
     double cfShooter = -0.31789925694465637; //conversion factor to ft/s for shooter
-    double cfClimber_counts2Length = 117.69/61.875; 
+ 
     //position
     SmartDashboard.putNumber("TopLMotorPos", tlM.getPosition());
     SmartDashboard.putNumber("BottomLMotorPos", blM.getPosition());
@@ -191,23 +214,25 @@ public class Robot extends TimedRobot
     // } else if (joystick.getrawbutton(6)) {
     //   solenoid.set(DoubleSolenoid.value.kreverse);
     // }
+    time.reset();
+  }
+  public void mecController(double motorpos){
 
   }
-
-  public void climberController()
+  public void climberController(double ref, double refVelocity)
   {
-    double ref = 50.0;
-    double Kp = 0.10;
+    double Kp = 0.70;
     double Ki = 0.0;
     double Kd = 0.0;
-    double cfClimber_counts2Length = 117.69/61.875; 
+    double dt = time.get();
+    // double convert = 5.0/50.0;
+    // double cfClimber_counts2Length = 2*3.14156*(0.375/2); 
     
-    double dt = 0.005; // Need to verify
     double Error = (ref-climber.getPosition());
-    double ErrorIntegral = Error*dt;
-    double ErrorDerivative = (Error - ErrorLast)/dt;
+    ErrorIntegral = ErrorIntegral + Error*dt;
+    double ErrorDerivative = (refVelocity-climber.getVelocity());
 
-    double u = Kp*(Error) + Ki*ErrorIntegral + Kd*ErrorDerivative;
+    double u = Kp*Error + Ki*ErrorIntegral + Kd*ErrorDerivative;
     
     ErrorLast = climber.getPosition();
 
@@ -219,8 +244,11 @@ public class Robot extends TimedRobot
     {
       u = -12.0;
     }
-    m_climber.set(u);
-    System.out.println(climber.getPosition());
+    m_climber.set(u/12.0);
+    System.out.println(u);
+
+    // System.out.println(climber.getPosition());
+    // System.out.println(ErrorIntegral);
   }
 
   @Override
@@ -247,12 +275,20 @@ public class Robot extends TimedRobot
     // moves backwards (to get point), feeder and shooter stop
     if (time.get() > 6.0 && time.get() < 8.5)
     {
+      //1.91 revolutions to reach 4 feet
+      if(brM.getPosition() >= 1.91){
+        m_topLeft.set(0.0);
+        m_topRight.set(0.0);
+        m_bottomLeft.set(0.0);
+        m_bottomRight.set(0.0);
+      }
       m_topLeft.set(-0.2);
       m_topRight.set(-0.2);
       m_bottomLeft.set(-0.2);
       m_bottomRight.set(-0.2);
       m_shooter.set(0.0);
       m_feeder.set(TalonSRXControlMode.PercentOutput, 0.0);
+      
     }
     // drive train stops
     if (time.get() > 8.5)
